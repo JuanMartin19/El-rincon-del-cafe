@@ -1,0 +1,70 @@
+name: CI/CD Pipeline - El Rincón del Café
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Permisos necesarios para que GitHub Actions pueda publicar en Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # 1. Fase de validación de código
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar ESLint
+        run: npm run lint
+
+  # 2. Fase de construcción
+  build:
+    name: Build PWA
+    needs: lint # Solo se ejecuta si "lint" fue exitoso
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Construir proyecto
+        run: npm run build
+      - name: Subir artefacto para GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  # 3. Fase de despliegue
+  deploy:
+    name: Deploy a GitHub Pages
+    needs: build # Solo se ejecuta si "build" fue exitoso
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Desplegar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
