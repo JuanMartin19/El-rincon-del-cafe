@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 const SocketContext = createContext();
 
 // Esta URL cambiará cuando subamos tu backend a internet (ej. Render o Railway)
-const SOCKET_URL = 'http://localhost:4000'; 
+const SOCKET_URL = 'https://rincon-del-cafe-api.onrender.com'; 
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
