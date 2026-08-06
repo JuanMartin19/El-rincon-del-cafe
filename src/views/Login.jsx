@@ -22,7 +22,15 @@ export default function Login() {
     setLoading(false);
 
     if (!result.ok) return setError(result.error);
-    navigate('/catalog');
+    
+    // ⚡ Validación robusta del rol (acepta 'admin', 'administrador', 'ADMIN', etc.)
+    const rolUsuario = result.rol ? result.rol.toLowerCase() : '';
+
+    if (rolUsuario.includes('admin')) {
+      navigate('/admin');
+    } else {
+      navigate('/catalog');
+    }
   };
 
   return (

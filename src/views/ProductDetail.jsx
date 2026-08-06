@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config';
+import { showToast } from '../components/ToastProvider';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext'; 
 
-// Ahora son opciones de preparación o complementos (ej. tamaño o tipo de leche)
 const OPTIONS = ['Normal', 'Deslactosada', 'Almendra', 'Avena', 'Soya'];
-
 const NUTRITION_GUIDE = [
   { tipo: 'Normal', cal: '120 kcal', carb: '12g', pro: '8g' },
   { tipo: 'Deslactosada', cal: '110 kcal', carb: '12g', pro: '8g' },
@@ -10,21 +13,112 @@ const NUTRITION_GUIDE = [
   { tipo: 'Avena', cal: '130 kcal', carb: '16g', pro: '3g' },
   { tipo: 'Soya', cal: '100 kcal', carb: '7g', pro: '7g' },
 ];
+const noImageSvg = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'%3E%3Crect width='150' height='150' fill='%23231C1A'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='13px' font-weight='bold' fill='%23B0A39C'%3ESin Foto%3C/text%3E%3C/svg%3E";
 
 export default function ProductDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { socket } = useSocket();
+  const { isAutenticado, token } = useAuth();
+
+  const [product, setProduct] = useState(null);
+  const [promociones, setPromociones] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [selectedOption, setSelectedOption] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [cartState, setCartState] = useState('idle'); // 'idle' | 'added'
+  const [cartState, setCartState] = useState('idle');
   const [optionError, setOptionError] = useState(false);
+  const [isFav, setIsFav] = useState(false);
 
-  const handleAddToCart = () => {
-    if (!selectedOption) {
+  useEffect(() => {
+    let cancelado = false;
+    async function fetchData() {
+      try {
+        const [resProd, resPromo] = await Promise.all([
+          fetch(`${API_URL}/productos/${id}`),
+          fetch(`${API_URL}/promociones/activas`)
+        ]);
+
+        if (!resProd.ok) throw new Error('Producto no encontrado');
+        const dataProd = await resProd.json();
+        const dataPromo = await resPromo.ok ? await resPromo.json() : [];
+
+        if (!cancelado) {
+          setProduct({ ...dataProd, price: Number(dataProd.price) });
+          setPromociones(dataPromo);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelado) setError(true);
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    }
+    fetchData();
+    return () => cancelado = true;
+  }, [id]);
+
+  useEffect(() => {
+    if (isAutenticado && token && product) {
+      fetch(`${API_URL}/favoritos`, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => { setIsFav(data.some(p => p.id === product.id)); })
+      .catch(console.error);
+    }
+  }, [isAutenticado, token, product]);
+
+  const handleAddToCart = async () => {
+    if (!isAutenticado) {
+      showToast({ icon: '⚠️', title: 'Inicia sesión', sub: 'Para agregar al pedido' });
+      return navigate('/login');
+    }
+    if (!selectedOption && product.type === 'Bebida') {
       setOptionError(true);
       return;
     }
     setOptionError(false);
     setCartState('added');
+
+    if (socket) {
+      socket.emit('accion_telefono', {
+        tipo: 'NUEVO_PEDIDO',
+        producto: product.name,
+        preparacion: selectedOption || 'Estándar',
+        precio: product.price
+      });
+    }
+
+    try {
+      await fetch(`${API_URL}/carrito/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ producto_id: product.id, cantidad: 1 })
+      });
+      showToast({ icon: '✓', title: 'Agregado al pedido', sub: product.name });
+    } catch (err) {
+      console.error(err);
+      showToast({ icon: '✕', title: 'Error', sub: 'No se pudo agregar al carrito' });
+    }
     setTimeout(() => setCartState('idle'), 2000);
+  };
+
+  const handleToggleFav = async () => {
+    if (!isAutenticado) {
+      showToast({ icon: '⚠️', title: 'Inicia sesión', sub: 'Para guardar tus favoritos' });
+      return navigate('/login');
+    }
+    const prevFav = isFav;
+    setIsFav(!prevFav);
+    showToast({ icon: !prevFav ? '♥' : '♡', title: !prevFav ? 'Guardado en favoritos' : 'Eliminado de favoritos', sub: product.name });
+
+    try {
+      await fetch(`${API_URL}/favoritos/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ producto_id: product.id })
+      });
+    } catch (error) { console.error('Error al actualizar favorito', error); }
   };
 
   const handleOptionSelect = (option) => {
@@ -32,139 +126,99 @@ export default function ProductDetail() {
     setOptionError(false);
   };
 
+  if (loading) return <div style={{...s.root, display: 'flex', justifyContent: 'center', alignItems: 'center'}}>Cargando detalles...</div>;
+  if (error || !product) return <div style={{...s.root, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20}}><p>No se pudo cargar el producto.</p><button onClick={() => navigate('/catalog')} style={s.ctaPrimary}>Volver al menú</button></div>;
+
+  // ⚡ Calcular si este producto tiene una promoción activa asociada
+  let precioFinal = product.price;
+  let badgePromo = null;
+
+  promociones.forEach(promo => {
+    const idsEspecificos = promo.productos_ids ? promo.productos_ids.split(',').map(Number) : [];
+    let aplica = idsEspecificos.length > 0 ? idsEspecificos.includes(product.id) : (promo.categoria_aplica === 'Todos' || product.category === promo.categoria_aplica);
+
+    if (aplica) {
+      if (promo.tipo === 'DESCUENTO') {
+        precioFinal = product.price * (1 - promo.valor / 100);
+        badgePromo = `${promo.valor}% OFF`;
+      } else if (promo.tipo === '2X1') {
+        badgePromo = '¡2x1!';
+      } else if (promo.tipo === 'COMBO') {
+        badgePromo = '¡Combo!';
+      }
+    }
+  });
+
+  const servidorBase = API_URL.replace('/api', '');
+  const imageUrl = product.image ? (product.image.startsWith('http') ? product.image : `${servidorBase}${product.image}`) : noImageSvg;
+
   return (
     <div style={s.root}>
       <style>{GLOBAL_CSS}</style>
-
-      {/* ── Breadcrumb ─────────────────────────────────────────────────── */}
       <div style={s.breadcrumb}>
-        <span style={s.breadcrumbLink}>Menú</span>
-        <span style={s.breadcrumbSep}>·</span>
-        <span style={s.breadcrumbLink}>Frío</span>
-        <span style={s.breadcrumbSep}>·</span>
-        <span style={s.breadcrumbCurrent}>Frappé Caramelo</span>
+        <span style={s.breadcrumbLink} onClick={() => navigate('/catalog')}>Menú</span><span style={s.breadcrumbSep}>·</span>
+        <span style={s.breadcrumbLink}>{product.category}</span><span style={s.breadcrumbSep}>·</span>
+        <span style={s.breadcrumbCurrent}>{product.name}</span>
       </div>
 
-      {/* ── Main grid ──────────────────────────────────────────────────── */}
       <div className="pd-grid">
-
-        {/* Imagen */}
         <div style={s.imgWrap}>
           <img
-            src="https://images.unsplash.com/photo-1578314675249-a6910f80cc4e?w=600"
-            alt="Frappé Caramelo"
-            style={s.img}
+            src={imageUrl} alt={product.name} style={s.img}
+            onError={(e) => { if (e.target.src !== noImageSvg) e.target.src = noImageSvg; }}
           />
-          <span style={s.badge}>Top</span>
-          <div style={s.stockBar}>
-            <span style={s.stockLabel}>Preparación</span>
-            <span style={s.stockSep} />
-            <span style={s.stockCount}>5 min apróx.</span>
-          </div>
+          <span style={s.badge}>{product.type}</span>
+          {badgePromo && <span style={s.promoBadge}>{badgePromo}</span>}
+          <div style={s.stockBar}><span style={s.stockLabel}>Preparación</span><span style={s.stockSep} /><span style={s.stockCount}>5 min apróx.</span></div>
         </div>
 
-        {/* Info */}
         <div>
-          <div style={s.eyebrow}>— Especialidades</div>
-          <h1 style={s.title}>Frappé<br />Caramelo</h1>
-
-          {/* Precio */}
+          <div style={s.eyebrow}>— Nuestra Cafetería</div>
+          <h1 style={s.title}>{product.name}</h1>
+          
+          {/* ⚡ Precio con descuento y tachado si aplica */}
           <div style={s.priceRow}>
-            <span style={s.price}>$85.00</span>
-            <span style={s.priceOld}>$95.00</span>
-            <span style={s.discount}>-10%</span>
+            {badgePromo && precioFinal < product.price ? (
+              <>
+                <span style={s.oldPrice}>${product.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                <span style={s.price}>${precioFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+              </>
+            ) : (
+              <span style={s.price}>${product.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            )}
           </div>
 
-          {/* Opciones */}
-          <div style={s.sizeSection}>
-            <div style={s.sizeHeader}>
-              <span style={s.sizeLabel}>Tipo de leche</span>
-              <button onClick={() => setIsModalOpen(true)} style={s.guideBtn}>
-                Ver información nutrimental
-              </button>
-            </div>
-            <div style={s.sizeGrid}>
-              {OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  onClick={() => handleOptionSelect(option)}
-                  style={{
-                    ...s.sizeBtn,
-                    ...(selectedOption === option ? s.sizeBtnActive : {}),
-                  }}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            <div style={{ ...s.sizeMsg, color: optionError ? '#E24B4A' : '#F0E040', minHeight: 18 }}>
-              {optionError
-                ? 'Selecciona una opción de preparación'
-                : selectedOption
-                ? `Leche ${selectedOption} seleccionada`
-                : ''}
-            </div>
-          </div>
-
-          {/* CTAs */}
-          <div style={s.ctaGroup}>
-            <button
-              onClick={handleAddToCart}
-              style={{
-                ...s.ctaPrimary,
-                ...(cartState === 'added' ? s.ctaAdded : {}),
-              }}
-            >
-              {cartState === 'added' ? '✓ Agregado al pedido' : '+ Añadir al pedido'}
-            </button>
-            <button style={s.ctaSecondary}>♡ Guardar en favoritos</button>
-          </div>
-
-          {/* Beneficios */}
-          <div style={s.benefits}>
-            {[
-              'Preparado al momento',
-              'Personalización sin costo adicional',
-              'Grano de especialidad local',
-            ].map((b) => (
-              <div key={b} style={s.benefit}>
-                <span style={s.benefitIcon}>✓</span>
-                {b}
+          {product.type === 'Bebida' && (
+            <div style={s.sizeSection}>
+              <div style={s.sizeHeader}><span style={s.sizeLabel}>Tipo de leche</span><button onClick={() => setIsModalOpen(true)} style={s.guideBtn}>Ver información nutrimental</button></div>
+              <div style={s.sizeGrid}>
+                {OPTIONS.map((option) => (
+                  <button key={option} onClick={() => handleOptionSelect(option)} style={{ ...s.sizeBtn, ...(selectedOption === option ? s.sizeBtnActive : {}) }}>{option}</button>
+                ))}
               </div>
-            ))}
+              <div style={{ ...s.sizeMsg, color: optionError ? '#E24B4A' : '#D4A373', minHeight: 18 }}>{optionError ? 'Selecciona una opción' : selectedOption ? `Leche ${selectedOption} seleccionada` : ''}</div>
+            </div>
+          )}
+          <div style={s.ctaGroup}>
+            <button onClick={handleAddToCart} style={{ ...s.ctaPrimary, ...(cartState === 'added' ? s.ctaAdded : {}) }}>{cartState === 'added' ? '✓ Agregado al pedido' : '+ Añadir al pedido'}</button>
+            <button onClick={handleToggleFav} style={s.ctaSecondary}>{isFav ? '♥ Guardado en favoritos' : '♡ Guardar en favoritos'}</button>
           </div>
+          <div style={s.benefits}>{['Preparado al momento', 'Ingredientes seleccionados', 'Calidad garantizada'].map((b) => (<div key={b} style={s.benefit}><span style={s.benefitIcon}>✓</span>{b}</div>))}</div>
         </div>
       </div>
 
-      {/* ── Modal: Guía Nutrimental ───────────────────────────────────────── */}
       {isModalOpen && (
         <div style={s.overlay} onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)}>
           <div style={s.modal}>
-            <button onClick={() => setIsModalOpen(false)} style={s.modalClose} aria-label="Cerrar">✕</button>
+            <button onClick={() => setIsModalOpen(false)} style={s.modalClose}>✕</button>
             <div style={s.modalEyebrow}>Salud y Nutrición</div>
             <h3 style={s.modalTitle}>Información Nutrimental</h3>
-            <p style={s.modalSub}>Valores aproximados por vaso (400ml)</p>
+            <p style={s.modalSub}>Valores aproximados por vaso</p>
             <table style={s.table}>
-              <thead>
-                <tr>
-                  {['Opción', 'Calorías', 'Carbs', 'Proteína'].map((h) => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {NUTRITION_GUIDE.map((row) => (
-                  <tr key={row.tipo} style={selectedOption === row.tipo ? s.trActive : {}}>
-                    {[row.tipo, row.cal, row.carb, row.pro].map((val, i) => (
-                      <td key={i} style={s.td}>{val}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
+              <thead><tr>{['Opción', 'Calorías', 'Carbs', 'Proteína'].map((h) => (<th key={h} style={s.th}>{h}</th>))}</tr></thead>
+              <tbody>{NUTRITION_GUIDE.map((row) => (<tr key={row.tipo} style={selectedOption === row.tipo ? s.trActive : {}}>{[row.tipo, row.cal, row.carb, row.pro].map((val, i) => (<td key={i} style={s.td}>{val}</td>))}</tr>))}</tbody>
             </table>
-            <button onClick={() => setIsModalOpen(false)} style={s.modalCloseBtn}>
-              Cerrar guía
-            </button>
+            <button onClick={() => setIsModalOpen(false)} style={s.modalCloseBtn}>Cerrar guía</button>
           </div>
         </div>
       )}
@@ -172,86 +226,55 @@ export default function ProductDetail() {
   );
 }
 
-// ─── Global CSS (responsive) ──────────────────────────────────────────────
 const GLOBAL_CSS = `
-  .pd-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 48px;
-    align-items: start;
-  }
-  @media (max-width: 768px) {
-    .pd-grid { grid-template-columns: 1fr; gap: 32px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; animation: none !important; }
-  }
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,600&family=Inter:wght@400;500;600&display=swap');
+  .pd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  @media (max-width: 768px) { .pd-grid { grid-template-columns: 1fr; gap: 32px; } }
 `;
 
-// ─── Styles ───────────────────────────────────────────────────────────────
 const s = {
-  root: {
-    background: '#0A0A0A',
-    minHeight: '100vh',
-    color: '#F5F5F0',
-    fontFamily: 'system-ui, sans-serif',
-    padding: '48px 5%',
-  },
-
+  root: { background: '#16110F', minHeight: '100vh', color: '#F9F6F0', fontFamily: '"Inter", sans-serif', padding: '48px 5%' },
   breadcrumb: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 },
-  breadcrumbLink: { fontSize: 11, color: '#444', letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer' },
-  breadcrumbSep: { fontSize: 11, color: '#2A2A2A' },
-  breadcrumbCurrent: { fontSize: 11, color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase' },
-
-  // Imagen
-  imgWrap: { position: 'relative', overflow: 'hidden', background: '#111', aspectRatio: '1/1' },
-  img: { width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: 'grayscale(10%)' },
-  badge: { position: 'absolute', top: 14, left: 0, background: '#F0E040', color: '#0A0A0A', fontSize: 9, fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', padding: '5px 12px' },
-  stockBar: { position: 'absolute', bottom: 0, left: 0, right: 0, background: '#0A0A0A', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 },
-  stockLabel: { fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase' },
-  stockSep: { flex: 1, height: 1, background: '#1E1E1E' },
-  stockCount: { fontSize: 10, fontWeight: 900, color: '#F0E040', letterSpacing: '0.08em' },
-
-  // Info
-  eyebrow: { fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#F0E040', fontWeight: 900, marginBottom: 12 },
-  title: { fontSize: 'clamp(28px, 4vw, 40px)', fontWeight: 900, letterSpacing: '-0.03em', textTransform: 'uppercase', color: '#F5F5F0', margin: '0 0 16px', lineHeight: 0.96 },
-
+  breadcrumbLink: { fontSize: 11, color: '#B0A39C', letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer' },
+  breadcrumbSep: { fontSize: 11, color: '#3A2E2A' },
+  breadcrumbCurrent: { fontSize: 11, color: '#D4A373', letterSpacing: '0.08em', textTransform: 'uppercase' },
+  imgWrap: { position: 'relative', overflow: 'hidden', background: '#231C1A', aspectRatio: '1/1', borderRadius: '12px' },
+  img: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  badge: { position: 'absolute', top: 14, left: 14, background: '#D4A373', color: '#16110F', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 14px', borderRadius: '4px' },
+  promoBadge: { position: 'absolute', top: 14, left: 95, background: '#E24B4A', color: '#FFF', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', padding: '6px 10px', borderRadius: '4px' },
+  stockBar: { position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(22,17,15,0.85)', backdropFilter: 'blur(4px)', padding: '14px', display: 'flex', alignItems: 'center', gap: 8 },
+  stockLabel: { fontSize: 11, color: '#F9F6F0', letterSpacing: '0.08em', textTransform: 'uppercase' },
+  stockSep: { flex: 1, height: 1, background: '#3A2E2A' },
+  stockCount: { fontSize: 11, fontWeight: 700, color: '#D4A373', letterSpacing: '0.08em' },
+  eyebrow: { fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D4A373', fontWeight: 600, marginBottom: 12 },
+  title: { fontFamily: '"Playfair Display", serif', fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 700, color: '#F9F6F0', margin: '0 0 16px', lineHeight: 1.1 },
   priceRow: { display: 'flex', alignItems: 'baseline', gap: 12, margin: '0 0 28px' },
-  price: { fontSize: 28, fontWeight: 900, color: '#F5F5F0', letterSpacing: '-0.02em' },
-  priceOld: { fontSize: 14, color: '#444', textDecoration: 'line-through' },
-  discount: { background: '#F0E040', color: '#0A0A0A', fontSize: 9, fontWeight: 900, letterSpacing: '0.12em', padding: '3px 8px' },
-
-  // Opciones
-  sizeSection: { borderTop: '1px solid #1E1E1E', paddingTop: 24 },
+  oldPrice: { fontSize: 18, color: '#B0A39C', textDecoration: 'line-through' },
+  price: { fontSize: 28, fontWeight: 600, color: '#D4A373' },
+  sizeSection: { borderTop: '1px solid #3A2E2A', paddingTop: 24 },
   sizeHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  sizeLabel: { fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#F5F5F0' },
-  guideBtn: { background: 'none', border: 'none', color: '#555', fontSize: 11, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'underline', letterSpacing: '0.06em' },
-  sizeGrid: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  sizeBtn: { padding: '10px 16px', border: '1px solid #2A2A2A', background: '#1A1A1A', color: '#F5F5F0', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' },
-  sizeBtnActive: { background: '#F0E040', color: '#0A0A0A', borderColor: '#F0E040' },
-  sizeMsg: { fontSize: 11, marginTop: 10, letterSpacing: '0.04em' },
-
-  // CTAs
-  ctaGroup: { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 },
-  ctaPrimary: { background: '#F0E040', color: '#0A0A0A', border: 'none', padding: 16, width: '100%', fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' },
-  ctaAdded: { background: '#1A1A1A', color: '#F0E040', border: '1px solid #F0E040' },
-  ctaSecondary: { background: 'transparent', border: '1px solid #2A2A2A', color: '#888', padding: 14, width: '100%', fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' },
-
-  // Beneficios
-  benefits: { borderTop: '1px solid #1E1E1E', marginTop: 28, paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 10 },
-  benefit: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#555' },
-  benefitIcon: { color: '#F0E040', fontSize: 12, flexShrink: 0 },
-
-  // Modal
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  modal: { position: 'relative', background: '#0F0F0F', border: '1px solid #2A2A2A', padding: '32px', width: '100%', maxWidth: 450 },
-  modalClose: { position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 16, fontFamily: 'inherit' },
-  modalEyebrow: { fontSize: 10, fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#F0E040', marginBottom: 10 },
-  modalTitle: { fontSize: 20, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.02em', color: '#F5F5F0', margin: '0 0 4px' },
-  modalSub: { fontSize: 12, color: '#555', margin: '0 0 0' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 13, margin: '20px 0 28px' },
-  th: { fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#555', padding: '8px 0', borderBottom: '1px solid #1E1E1E', textAlign: 'left' },
-  td: { padding: '10px 0', borderBottom: '1px solid #1A1A1A', color: '#F5F5F0' },
-  trActive: { background: 'rgba(240,224,64,0.06)' },
-  modalCloseBtn: { background: 'transparent', border: '1px solid #2A2A2A', color: '#888', padding: 12, width: '100%', fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' },
+  sizeLabel: { fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#F9F6F0' },
+  guideBtn: { background: 'none', border: 'none', color: '#B0A39C', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'underline' },
+  sizeGrid: { display: 'flex', gap: 10, flexWrap: 'wrap' },
+  sizeBtn: { padding: '10px 18px', border: '1px solid #3A2E2A', background: '#231C1A', color: '#B0A39C', borderRadius: '6px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' },
+  sizeBtnActive: { background: '#D4A373', color: '#16110F', borderColor: '#D4A373', fontWeight: 600 },
+  sizeMsg: { fontSize: 12, marginTop: 10 },
+  ctaGroup: { display: 'flex', flexDirection: 'column', gap: 12, marginTop: 28 },
+  ctaPrimary: { background: '#D4A373', color: '#16110F', border: 'none', borderRadius: '8px', padding: '16px', width: '100%', fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' },
+  ctaAdded: { background: '#231C1A', color: '#D4A373', border: '1px solid #D4A373' },
+  ctaSecondary: { background: 'transparent', border: '1px solid #3A2E2A', borderRadius: '8px', color: '#B0A39C', padding: '14px', width: '100%', fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' },
+  benefits: { borderTop: '1px solid #3A2E2A', marginTop: 32, paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 12 },
+  benefit: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, color: '#F9F6F0' },
+  benefitIcon: { color: '#D4A373', fontSize: 16, flexShrink: 0 },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(22,17,15,0.85)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modal: { position: 'relative', background: '#231C1A', border: '1px solid #3A2E2A', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: 450 },
+  modalClose: { position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#B0A39C', cursor: 'pointer', fontSize: 20 },
+  modalEyebrow: { fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D4A373', marginBottom: 12 },
+  modalTitle: { fontFamily: '"Playfair Display", serif', fontSize: 24, color: '#F9F6F0', margin: '0 0 8px' },
+  modalSub: { fontSize: 14, color: '#B0A39C', margin: '0 0 0' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14, margin: '24px 0 32px' },
+  th: { fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#B0A39C', padding: '10px 0', borderBottom: '1px solid #3A2E2A', textAlign: 'left' },
+  td: { padding: '12px 0', borderBottom: '1px solid #3A2E2A', color: '#F9F6F0' },
+  trActive: { background: 'rgba(212,163,115,0.1)' },
+  modalCloseBtn: { background: 'transparent', border: '1px solid #3A2E2A', borderRadius: '8px', color: '#B0A39C', padding: '12px', width: '100%', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s' },
 };

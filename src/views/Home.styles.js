@@ -49,9 +49,22 @@ const s = {
   heroBadge: { position: 'absolute', bottom: -20, left: -20, background: surface, color: accent, padding: '16px 24px', borderRadius: '8px', fontSize: 13, fontWeight: 600, border: `1px solid ${border}`, boxShadow: '0 10px 20px rgba(0,0,0,0.2)' },
   heroWatermark: { display: 'none' },
   
-  promoStrip: { margin: '40px 5%', background: surface, border: `1px solid ${border}`, borderRadius: '16px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 },
-  promoTitle: { fontFamily: '"Playfair Display", serif', fontSize: 24, fontWeight: 600, color: accent, marginBottom: 8 },
-  promoSub: { fontSize: 15, color: textMuted },
+  promoStrip: { 
+    background: '#D4A373', 
+    padding: '24px 5%', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    flexWrap: 'wrap', 
+    gap: 16,
+    position: 'relative',
+    zIndex: 10,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    margin: '0 0 20px 0'
+  },
+  promoTitle: { fontSize: 20, fontWeight: 700, color: '#16110F', marginBottom: 4, fontFamily: '"Playfair Display", serif' },
+  promoSub: { fontSize: 14, color: '#231C1A' },
+  ctaPromo: { background: '#16110F', color: '#D4A373', border: 'none', padding: '12px 24px', borderRadius: '6px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', cursor: 'pointer' },
   
   leaderboardWrap: { display: 'none' },
   

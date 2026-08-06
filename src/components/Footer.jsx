@@ -61,14 +61,32 @@ export default function Footer() {
           </div>
         </div>
 
+        {/* ⚡ FIX: Usamos un arreglo con 'to' y 'label' para usar el componente <Link> de React Router */}
         {[
-          { title: 'Nuestra Cafetería', links: ['Nosotros', 'Menú', 'Nuestros Granos', 'Ubicación'] },
-          { title: 'Soporte', links: ['Centro de ayuda', 'Facturación', 'Preguntas Frecuentes'] },
+          { 
+            title: 'Nuestra Cafetería', 
+            links: [
+              { label: 'Nosotros', to: '/nosotros' }, 
+              { label: 'Menú', to: '/catalog' }, 
+              { label: 'Nuestros Granos', to: '/granos' }, 
+              { label: 'Ubicación', to: '/ubicacion' }
+            ] 
+          },
+          { 
+            title: 'Soporte', 
+            links: [
+              { label: 'Centro de ayuda', to: '/ayuda' }, 
+              { label: 'Facturación', to: '/ayuda' }, 
+              { label: 'Preguntas Frecuentes', to: '/faq' }
+            ] 
+          },
         ].map((col) => (
           <div key={col.title} style={{ display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'left', alignItems: 'flex-start' }}>
             <div style={s.footerColTitle}>{col.title}</div>
             {col.links.map((l) => (
-              <a key={l} href="#" style={s.footerLink} className="footer-hover-link">{l}</a>
+              <Link key={l.label} to={l.to} style={s.footerLink} className="footer-hover-link">
+                {l.label}
+              </Link>
             ))}
           </div>
         ))}

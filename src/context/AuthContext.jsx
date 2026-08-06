@@ -20,8 +20,6 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem('rdc_usuario')
   }, [usuario])
 
-  // Devuelve { ok: true } o { ok: false, error: 'mensaje' } — nunca lanza,
-  // así las vistas solo revisan `ok` sin necesidad de try/catch propio.
   const login = async (email, password) => {
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
@@ -34,7 +32,10 @@ export function AuthProvider({ children }) {
 
       setToken(data.token)
       setUsuario(data.usuario)
-      return { ok: true }
+      
+      // ⚡ ASEGURAMOS QUE DEVUELVA EL ROL CORRECTAMENTE
+      const rolEncontrado = data.usuario && data.usuario.rol ? data.usuario.rol : 'cliente';
+      return { ok: true, rol: rolEncontrado } 
     } catch (err) {
       return { ok: false, error: 'No se pudo conectar con el servidor' }
     }
