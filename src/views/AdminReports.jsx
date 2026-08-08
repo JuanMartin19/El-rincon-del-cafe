@@ -103,6 +103,26 @@ export default function AdminReports() {
             </ResponsiveContainer>
           </div>
         </div>
+
+        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}
+        <div style={{ ...s.chartBox, gridColumn: '1 / -1' }}>
+          <h3 style={s.chartTitle}>Auditoría de Rendimiento (Lighthouse)</h3>
+          <div style={{ width: '100%', height: '500px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #3A2E2A', background: '#fff' }}>
+            <iframe 
+              src="https://pagespeed.web.dev/analysis/https-el-rincon-del-cafe-gray-vercel-app/go5hqwsj37?hl=es-419&form_factor=desktop" 
+              width="100%" 
+              height="100%" 
+              frameBorder="0"
+              title="Reporte Lighthouse"
+            ></iframe>
+          </div>
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+             <a href="https://pagespeed.web.dev/analysis/https-el-rincon-del-cafe-gray-vercel-app/go5hqwsj37?hl=es-419&form_factor=desktop" target="_blank" rel="noreferrer" style={s.btnEnlace}>
+                Abrir Reporte en Pestaña Nueva
+             </a>
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -123,5 +143,7 @@ const s = {
   
   tooltip: { background: '#110D0C', border: '1px solid #3A2E2A', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 10px 20px rgba(0,0,0,0.5)' },
   tooltipLabel: { margin: 0, fontSize: 11, color: '#B0A39C', fontWeight: 600, letterSpacing: '0.05em' },
-  tooltipValue: { margin: '4px 0 0', fontSize: 18, color: '#D4A373', fontWeight: 700 }
+  tooltipValue: { margin: '4px 0 0', fontSize: 18, color: '#D4A373', fontWeight: 700 },
+
+  btnEnlace: { display: 'inline-block', background: '#D4A373', color: '#16110F', padding: '10px 20px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase' }
 };

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { PayPalScriptProvider } from '@paypal/react-paypal-js'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 
 // Leemos el Client ID de las variables de entorno
 const paypalOptions = {
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <PayPalScriptProvider options={paypalOptions}>
       <App />
+      <SpeedInsights />
     </PayPalScriptProvider>
   </StrictMode>,
 )
