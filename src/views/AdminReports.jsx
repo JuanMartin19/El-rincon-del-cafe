@@ -104,22 +104,18 @@ export default function AdminReports() {
           </div>
         </div>
 
-        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}
+        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}git add .
         <div style={{ ...s.chartBox, gridColumn: '1 / -1' }}>
           <h3 style={s.chartTitle}>Auditoría de Rendimiento (Lighthouse)</h3>
-          <div style={{ width: '100%', height: '500px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #3A2E2A', background: '#fff' }}>
+          
+          <div style={{ width: '100%', height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #3A2E2A', background: '#fff' }}>
             <iframe 
-              src="https://pagespeed.web.dev/analysis/https-el-rincon-del-cafe-gray-vercel-app/go5hqwsj37?hl=es-419&form_factor=desktop" 
+              src="/reporte-lighthouse.html" 
               width="100%" 
               height="100%" 
               frameBorder="0"
               title="Reporte Lighthouse"
             ></iframe>
-          </div>
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-             <a href="https://pagespeed.web.dev/analysis/https-el-rincon-del-cafe-gray-vercel-app/go5hqwsj37?hl=es-419&form_factor=desktop" target="_blank" rel="noreferrer" style={s.btnEnlace}>
-                Abrir Reporte en Pestaña Nueva
-             </a>
           </div>
         </div>
 
