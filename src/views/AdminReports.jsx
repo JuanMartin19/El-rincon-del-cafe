@@ -13,7 +13,7 @@ export default function AdminReports() {
   const [errorAuth, setErrorAuth] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('rdc_token');
 
     // ⚡ SEGURO ANTI-NULL: Evita mandar tokens vacíos al backend
     if (!token || token === 'null' || token === 'undefined') {

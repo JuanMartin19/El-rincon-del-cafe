@@ -9,7 +9,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(false);
 
   const cargarUsuarios = () => {
-    const token = localStorage.getItem('token'); 
+    const token = localStorage.getItem('rdc_token');
     
     // ⚡ SEGURO ANTI-NULL
     if (!token || token === 'null' || token === 'undefined') {
@@ -47,7 +47,7 @@ export default function AdminUsers() {
     setError('');
     setLoading(true);
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('rdc_token');
     
     if (!token || token === 'null' || token === 'undefined') {
       setError('Error de sesión. Vuelve a iniciar sesión.');
