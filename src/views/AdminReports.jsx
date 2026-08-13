@@ -12,7 +12,16 @@ export default function AdminReports() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/reportes`)
+    // ⚡ Leemos el token guardado
+    const token = localStorage.getItem('token');
+
+    fetch(`${API_URL}/reportes`, {
+      // ⚡ Agregamos el token a los headers
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
       .then(res => res.json())
       .then(data => {
         setMetricas(data);
@@ -104,7 +113,7 @@ export default function AdminReports() {
           </div>
         </div>
 
-        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}git add .
+        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}
         <div style={{ ...s.chartBox, gridColumn: '1 / -1' }}>
           <h3 style={s.chartTitle}>Auditoría de Rendimiento (Lighthouse)</h3>
           
