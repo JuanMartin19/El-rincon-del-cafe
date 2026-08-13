@@ -10,36 +10,45 @@ export default function AdminReports() {
     categorias: []
   });
   const [loading, setLoading] = useState(true);
+  const [errorAuth, setErrorAuth] = useState(false);
 
   useEffect(() => {
-    // ⚡ Leemos el token guardado
     const token = localStorage.getItem('token');
 
+    // ⚡ SEGURO ANTI-NULL: Evita mandar tokens vacíos al backend
+    if (!token || token === 'null' || token === 'undefined') {
+      console.error("No hay token válido guardado en el navegador.");
+      setErrorAuth(true);
+      setLoading(false);
+      return;
+    }
+
     fetch(`${API_URL}/reportes`, {
-      // ⚡ Agregamos el token a los headers
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     })
-      .then(res => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setMetricas(data);
         setLoading(false);
       })
       .catch(err => {
         console.error("Error cargando reportes:", err);
+        setErrorAuth(true);
         setLoading(false);
       });
   }, []);
 
   const fmt = (n) => '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2 });
 
-  if (loading) {
-    return <div style={{ ...s.content, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Cargando analíticas...</div>;
-  }
+  if (loading) return <div style={s.centerBox}>Cargando analíticas...</div>;
+  if (errorAuth) return <div style={s.centerBox}><p style={{color: '#ff6b6b'}}>Acceso denegado. Por favor, cierra sesión y vuelve a entrar.</p></div>;
 
-  // Personalización del recuadro emergente (Tooltip) al pasar el mouse por la gráfica
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -56,7 +65,6 @@ export default function AdminReports() {
     <div style={s.content}>
       <h2 style={s.title}>Reportes Financieros y Métricas</h2>
       
-      {/* Tarjetas de Resumen */}
       <div style={s.statsRow}>
         <div style={s.statCard}>
           <div style={s.statLabel}>Ventas Totales (Histórico)</div>
@@ -75,7 +83,6 @@ export default function AdminReports() {
       </div>
 
       <div style={s.chartsGrid}>
-        {/* Gráfica de Ingresos (Línea/Área) */}
         <div style={s.chartBox}>
           <h3 style={s.chartTitle}>Ingresos de los Últimos 7 Días</h3>
           <div style={{ width: '100%', height: 300 }}>
@@ -97,7 +104,6 @@ export default function AdminReports() {
           </div>
         </div>
 
-        {/* Gráfica de Categorías de Inventario (Barras) */}
         <div style={s.chartBox}>
           <h3 style={s.chartTitle}>Distribución del Menú</h3>
           <div style={{ width: '100%', height: 300 }}>
@@ -113,10 +119,8 @@ export default function AdminReports() {
           </div>
         </div>
 
-        {/* REPORTE DE LIGHTHOUSE INCRUSTADO */}
         <div style={{ ...s.chartBox, gridColumn: '1 / -1' }}>
           <h3 style={s.chartTitle}>Auditoría de Rendimiento (Lighthouse)</h3>
-          
           <div style={{ width: '100%', height: '600px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #3A2E2A', background: '#fff' }}>
             <iframe 
               src="/reporte-lighthouse.html" 
@@ -127,7 +131,6 @@ export default function AdminReports() {
             ></iframe>
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -135,20 +138,16 @@ export default function AdminReports() {
 
 const s = {
   content: { padding: '40px 48px', overflowY: 'auto', flex: 1, background: '#0A0A0A' },
+  centerBox: { padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, background: '#0A0A0A', color: '#B0A39C' },
   title: { fontSize: 32, fontWeight: 700, fontFamily: '"Playfair Display", serif', margin: 0, color: '#D4A373', marginBottom: 32 },
-  
   statsRow: { display: 'flex', gap: 20, marginBottom: 32, flexWrap: 'wrap' },
   statCard: { background: '#16110F', border: '1px solid #3A2E2A', borderRadius: '10px', padding: '24px', flex: 1, minWidth: 200 },
   statLabel: { fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#B0A39C', marginBottom: 12 },
   statValue: { fontSize: 32, fontWeight: 700, color: '#F9F6F0' },
-  
   chartsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24 },
   chartBox: { background: '#16110F', border: '1px solid #3A2E2A', borderRadius: '10px', padding: '24px' },
   chartTitle: { fontSize: 16, fontWeight: 600, color: '#F9F6F0', margin: '0 0 24px 0' },
-  
   tooltip: { background: '#110D0C', border: '1px solid #3A2E2A', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 10px 20px rgba(0,0,0,0.5)' },
   tooltipLabel: { margin: 0, fontSize: 11, color: '#B0A39C', fontWeight: 600, letterSpacing: '0.05em' },
-  tooltipValue: { margin: '4px 0 0', fontSize: 18, color: '#D4A373', fontWeight: 700 },
-
-  btnEnlace: { display: 'inline-block', background: '#D4A373', color: '#16110F', padding: '10px 20px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: 12, textTransform: 'uppercase' }
+  tooltipValue: { margin: '4px 0 0', fontSize: 18, color: '#D4A373', fontWeight: 700 }
 };

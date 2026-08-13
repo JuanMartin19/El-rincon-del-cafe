@@ -9,19 +9,29 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(false);
 
   const cargarUsuarios = () => {
-    // ⚡ Leemos el token guardado
     const token = localStorage.getItem('token'); 
     
+    // ⚡ SEGURO ANTI-NULL
+    if (!token || token === 'null' || token === 'undefined') {
+      setError('Tu sesión expiró o no tienes acceso. Por favor cierra sesión y vuelve a entrar.');
+      return;
+    }
+    
     fetch(`${API_URL}/auth/usuarios`, {
-      // ⚡ Agregamos el token a los headers
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     })
-      .then(res => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error('No autorizado');
+        return res.json();
+      })
       .then(data => { if (Array.isArray(data)) setUsuarios(data); })
-      .catch(err => console.error("Error al cargar usuarios:", err));
+      .catch(err => {
+         console.error(err);
+         setError('No autorizado. Cierra sesión y vuelve a entrar.');
+      });
   };
 
   useEffect(() => {
@@ -37,15 +47,20 @@ export default function AdminUsers() {
     setError('');
     setLoading(true);
 
-    // ⚡ Leemos el token guardado
     const token = localStorage.getItem('token');
+    
+    if (!token || token === 'null' || token === 'undefined') {
+      setError('Error de sesión. Vuelve a iniciar sesión.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API_URL}/auth/crear-usuario`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // ⚡ Agregamos el token a los headers
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(form)
       });
@@ -79,6 +94,8 @@ export default function AdminUsers() {
         </button>
       </div>
 
+      {error && <div style={s.errorBoxGlobal}>{error}</div>}
+
       <div style={s.tableContainer}>
         <table style={s.table}>
           <thead>
@@ -108,7 +125,7 @@ export default function AdminUsers() {
                 <td style={s.td}>{u.creado_en ? new Date(u.creado_en).toLocaleDateString() : 'N/A'}</td>
               </tr>
             )) : (
-              <tr><td colSpan="5" style={{ ...s.td, textAlign: 'center', padding: 40 }}>Cargando usuarios...</td></tr>
+              <tr><td colSpan="5" style={{ ...s.td, textAlign: 'center', padding: 40 }}>{error ? 'Bloqueado' : 'Cargando usuarios...'}</td></tr>
             )}
           </tbody>
         </table>
@@ -176,6 +193,7 @@ const s = {
   modalTitle: { fontSize: 24, fontWeight: 700, fontFamily: '"Playfair Display", serif', color: '#F9F6F0', margin: 0 },
   modalSub: { fontSize: 13, color: '#B0A39C', marginTop: 6, marginBottom: 24 },
   errorBox: { background: '#2a1212', border: '1px solid #5a1e1e', color: '#ff6b6b', padding: '10px 14px', fontSize: 12, marginBottom: 16 },
+  errorBoxGlobal: { background: '#2a1212', border: '1px solid #5a1e1e', color: '#ff6b6b', padding: '16px', fontSize: 14, marginBottom: 24, borderRadius: 6, textAlign: 'center' },
   form: { display: 'flex', flexDirection: 'column', gap: 16 },
   fieldGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
   label: { fontSize: 10, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#B0A39C' },
